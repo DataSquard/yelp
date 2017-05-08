@@ -1,37 +1,18 @@
 from urllib.request import urlopen
 from bs4 import BeautifulSoup
 import re
+import pandas as pd
 
 baseUrl = 'https://www.yelp.com/search?find_loc=Eden+Prairie,+MN&start=0&cflt=restaurants'
-baseUrl_html = urlopen(baseUrl)
-baseUrl_Obj = BeautifulSoup(baseUrl_html)
 
-num_of_pages = int(re.findall('^.*\s([0-9]+)$',
-                              baseUrl_Obj.find('div', {
-                                  'class': 'page-of-pages arrange_unit arrange_unit--fill'}).text.strip())[0])
-
-for RestHref in baseUrl_Obj.find_all('li', {'class': 'regular-search-result'}):
-    RestUrl = 'www.yelp.com' + RestHref.find('a', {'class': 'biz-name js-analytics-click'}).attrs['href']
-    PhotoUrl = 'www.yelp.com' + RestHref.find('a', {'class': 'biz-name js-analytics-click'}).attrs['href'].replace(
-        'biz', 'biz_photos') + '?tab=food'
-    RestUrl_html = urlopen('https://' + RestUrl)
-    RestUrl_Obj = BeautifulSoup(RestUrl_html)
-
-    if RestUrl_Obj.find('div', {'class': 'rating-info clearfix'}) is None:
-        rating = -1.0
-    else:
-        rating =int(re.findall('^\s+([0-9]+)\s.*', RestUrl_Obj.find('div', {'class': 'rating-info clearfix'}).div.span.text)[0])
-    print(rating)
-
-        re.findall('^\s+([0-9]+)\s.*$',
 def YelpSpider(baseUrl):
-    baseUrl = 'https://www.yelp.com/search?find_loc=Eden+Prairie,+MN&start=0&cflt=restaurants'
     baseUrl_html = urlopen(baseUrl)
     baseUrl_Obj = BeautifulSoup(baseUrl_html)
 
     num_of_pages = int(re.findall('^.*\s([0-9]+)$',
                                   baseUrl_Obj.find('div', {
                                       'class': 'page-of-pages arrange_unit arrange_unit--fill'}).text.strip())[0])
+    YelpRestaurant = {}
 
     for page_num in range(0, num_of_pages):
         SearchUrl = 'https://www.yelp.com/search?find_loc=Eden+Prairie,+MN&start={}&cflt=restaurants'.format(
@@ -41,13 +22,14 @@ def YelpSpider(baseUrl):
 
         for RestHref in SearchUrl_Obj.find_all('li', {'class': 'regular-search-result'}):
             RestUrl = 'www.yelp.com' + RestHref.find('a', {'class': 'biz-name js-analytics-click'}).attrs['href']
-            RestUrl_html = urlopen(RestUrl)
+            RestUrl_html = urlopen('https://' + RestUrl)
             RestUrl_Obj = BeautifulSoup(RestUrl_html)
 
             if RestUrl_Obj.find('h1', {'class': 'biz-page-title embossed-text-white shortenough'}) is None:
-                RestName = RestUrl_Obj.find('h1', {'class': 'biz-page-title embossed-text-white'}).text
+                RestName = RestUrl_Obj.find('h1', {'class': 'biz-page-title embossed-text-white'}).text.strip()
             else:
-                RestName = RestUrl_Obj.find('h1', {'class': 'biz-page-title embossed-text-white shortenough'}).text
+                RestName = RestUrl_Obj.find('h1',
+                                            {'class': 'biz-page-title embossed-text-white shortenough'}).text.strip()
 
             if RestUrl_Obj.find('div', {'class': 'rating-info clearfix'}) is None:
                 rating = -1.0
@@ -57,11 +39,45 @@ def YelpSpider(baseUrl):
                     re.findall('\d+\.\d+', RestUrl_Obj.find('div', {'class': 'rating-info clearfix'}).div.div['title'])[
                         0])
                 num_of_reviews = int(re.findall('^\s+([0-9]+)\s.*',
-                                        RestUrl_Obj.find('div', {'class': 'rating-info clearfix'}).div.span.text)[0])
+                                                RestUrl_Obj.find('div',
+                                                                 {'class': 'rating-info clearfix'}).div.span.text)[0])
 
+            if RestUrl_Obj.find('div', {'class': 'map-box-address u-space-l4'}).strong.address is None:
+                address_1 = 'Unknown'
+                address_2 = 'Unknown'
+            elif len(RestUrl_Obj.find('div', {'class': 'map-box-address u-space-l4'}).strong.address.contents) == 3:
+                address_1 = RestUrl_Obj.find('div', {'class': 'map-box-address u-space-l4'}).strong.address.contents[
+                    0].strip()
+                address_2 = RestUrl_Obj.find('div', {'class': 'map-box-address u-space-l4'}).strong.address.contents[
+                    2].strip()
+            else:
+                address_1 = RestUrl_Obj.find('div', {'class': 'map-box-address u-space-l4'}).strong.address.contents[
+                    0].strip()
+                address_2 = 'Unknown'
 
+            if RestUrl_Obj.find('span', {'class': 'biz-phone'}) is None:
+                phone = 9999999999
+            else:
+                phone = int(''.join(re.findall('\d+', RestUrl_Obj.find('span', {'class': 'biz-phone'}).text)))
+
+            if RestUrl_Obj.find('span', {'class': 'category-str-list'}).a is None:
+                category = 'Unknown'
+            else:
+                category = RestUrl_Obj.find('span', {'class': 'category-str-list'}).a.text
+
+            if RestUrl_Obj.find('span', {'class': 'business-attribute price-range'}) is None:
+                price_range = -1
+            else:
+                price_range = len(RestUrl_Obj.find('span', {'class': 'business-attribute price-range'}).text)
 
             PhotoUrl = 'www.yelp.com' + RestHref.find('a', {'class': 'biz-name js-analytics-click'}).attrs[
                 'href'].replace(
                 'biz', 'biz_photos') + '?tab=food'
-            print(RestName)
+
+            YelpRestaurant[RestName] = [rating, num_of_reviews, address_1, address_2,
+                                        phone, category, price_range]
+    return YelpRestaurant
+
+
+EdenPraire = YelpSpider(baseUrl)
+
